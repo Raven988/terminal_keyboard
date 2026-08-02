@@ -548,6 +548,10 @@ class A(terkb.App):
             "у «Системы» цвета терминала сброшены",
             self.term_bg() is None and self.win.scheme["bg"] is None)
         yield lambda: self.win.set_scheme(self.scheme_before)
+        # Своя иконка: из темы, если приложение установлено, иначе из файлов
+        # рядом с пакетом. Второй путь важнее — по нему запускают из исходников.
+        yield lambda: self.expect("иконка приложения находится",
+                                  self.icon_found())
 
         # ---------- ссылки в выводе ----------
         yield lambda: self.term.raw(
@@ -820,6 +824,24 @@ class A(terkb.App):
         return (after != before and after in self.win.fonts
                 and self.setting("font") == after
                 and self.win.term.vte.get_font().get_family() == after)
+
+    def icon_found(self):
+        """Иконка должна находиться и через тему, и файлом из исходников."""
+        from gi.repository import GdkPixbuf
+        theme_ok = Gtk.IconTheme.get_default().has_icon(terkb.app.ICON_NAME)
+        files = [os.path.join(terkb.app.ICON_DIR, n)
+                 for n in ("terkb-128.png", "terkb-64.png", "terkb.svg")]
+        loaded = False
+        for path in files:
+            if not os.path.exists(path):
+                continue
+            try:
+                GdkPixbuf.Pixbuf.new_from_file(path)
+                loaded = True
+                break
+            except Exception:
+                continue      # этот формат сборка gdk-pixbuf не читает
+        return (theme_ok or loaded) and terkb.app.set_app_icon()
 
     # -- ссылки -------------------------------------------------------------
     def match_at(self, needle):
