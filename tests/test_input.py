@@ -552,6 +552,11 @@ class A(terkb.App):
         # рядом с пакетом. Второй путь важнее — по нему запускают из исходников.
         yield lambda: self.expect("иконка приложения находится",
                                   self.icon_found())
+        # Под Wayland оболочка связывает окно с ярлыком по app_id: имя файла
+        # ярлыка, StartupWMClass и имя программы должны совпадать, иначе окно
+        # останется без имени и с чужой иконкой.
+        yield lambda: self.expect("ярлык и app_id сходятся",
+                                  self.desktop_matches_app_id())
 
         # ---------- ссылки в выводе ----------
         yield lambda: self.term.raw(
@@ -824,6 +829,23 @@ class A(terkb.App):
         return (after != before and after in self.win.fonts
                 and self.setting("font") == after
                 and self.win.term.vte.get_font().get_family() == after)
+
+    def desktop_matches_app_id(self):
+        from gi.repository import GLib
+        root = os.path.dirname(os.path.dirname(os.path.abspath(terkb.__file__)))
+        path = os.path.join(root, terkb.app.APP_ID + ".desktop")
+        if not os.path.exists(path):
+            return False
+        fields = {}
+        with open(path, encoding="utf-8") as f:
+            for line in f:
+                if "=" in line:
+                    key, _, value = line.partition("=")
+                    fields[key.strip()] = value.strip()
+        terkb.app.set_app_id()
+        return (fields.get("StartupWMClass") == terkb.app.APP_ID
+                and fields.get("Icon") == terkb.app.ICON_NAME
+                and GLib.get_prgname() == terkb.app.APP_ID)
 
     def icon_found(self):
         """Иконка должна находиться и через тему, и файлом из исходников."""

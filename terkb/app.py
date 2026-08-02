@@ -19,7 +19,10 @@ APP_ID = "org.terkb.Terminal"
 
 # Иконка: имя в теме — когда приложение установлено, файлы рядом с пакетом —
 # когда его запускают прямо из каталога с исходниками.
-ICON_NAME = "terkb"
+# Установленная иконка зовётся по app_id — так её ищет оболочка; короткое имя
+# остаётся запасным, им пользуются меню и прежние версии.
+ICON_NAME = APP_ID
+ICON_NAME_SHORT = "terkb"
 ICON_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(
     __file__))), "icons")
 
@@ -28,9 +31,11 @@ def set_app_icon():
     """Своя иконка окна. Установленную берём из темы: так её подхватят и
     панель задач, и переключатель окон. Из исходников — прямо из файла, причём
     сначала растровые копии: SVG-загрузчик gdk-pixbuf стоит не везде."""
-    if Gtk.IconTheme.get_default().has_icon(ICON_NAME):
-        Gtk.Window.set_default_icon_name(ICON_NAME)
-        return True
+    theme = Gtk.IconTheme.get_default()
+    for name in (ICON_NAME, ICON_NAME_SHORT):
+        if theme.has_icon(name):
+            Gtk.Window.set_default_icon_name(name)
+            return True
     for name in ("terkb-128.png", "terkb-64.png", "terkb.svg"):
         path = os.path.join(ICON_DIR, name)
         if not os.path.exists(path):
@@ -71,7 +76,21 @@ USAGE = """terkb — терминал со сплит-клавиатурой д�
 """ % LAYOUT_FILE
 
 
+def set_app_id():
+    """Назваться так же, как называется файл ярлыка.
+
+    Под Wayland оболочка связывает окно с ярлыком по app_id, а GTK берёт его
+    из имени программы — то есть «python3», раз запуск идёт через
+    «python3 -m terkb». Из-за этого GNOME не находил org.terkb.Terminal.desktop
+    и показывал окно без имени и с чужой иконкой, а значок в доке оставался
+    пустым. Под X11 за то же отвечает WM_CLASS.
+    """
+    GLib.set_prgname(APP_ID)
+    Gdk.set_program_class(APP_ID)
+
+
 def main(argv):
+    set_app_id()
     if len(argv) > 1:
         if argv[1] in ("-h", "--help"):
             print(USAGE)

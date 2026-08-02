@@ -23,8 +23,9 @@ from .terminal import LINK_REGEX_FLAGS, EntrySink, Terminal
 
 class Window(Gtk.ApplicationWindow):
     def __init__(self, app):
-        super().__init__(application=app,
-                         title="terkb — терминал со сплит-клавиатурой")
+        # Заголовок короткий: он же подписывает окно в доке и в переключателе,
+        # и длинная строка там просто обрезается.
+        super().__init__(application=app, title="terkb")
         self.get_style_context().add_class("terkb-win")
 
         self.settings = load_settings()
