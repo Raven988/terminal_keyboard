@@ -16,6 +16,8 @@ import terkb
 import tempfile
 _MACRO_DIR = tempfile.mkdtemp(prefix="terkb-test-")
 terkb.MACRO_FILE = os.path.join(_MACRO_DIR, "macros.json")
+# Схема и шрифт тоже пишутся в конфиг — уводим и их.
+terkb.SETTINGS_FILE = os.path.join(_MACRO_DIR, "settings.json")
 
 W, H = 1500, 950
 results = []
@@ -183,11 +185,16 @@ class A(terkb.App):
 
         # ---------- программируемые клавиши ----------
         yield lambda: self.expect(
-            "их четыре и все пустые",
+            "все программируемые на месте и пустые",
             len(self.macro_keys()) == terkb.PROG_KEYS
             and all(k.label.get_text() == "M%d" % (k.data + 1)
                     and k.button.get_style_context().has_class("kb-macro-empty")
                     for k in self.macro_keys()))
+        # Одна и та же команда лежит на клавише в каждой раскладке: состояние
+        # общее, и в портрете макросы те же самые.
+        yield lambda: self.expect(
+            "каждый макрос есть и в цельной раскладке",
+            all(len(self.macro_twins(i)) >= 2 for i in range(terkb.PROG_KEYS)))
         yield lambda: self.win.state.press(self.macro_keys()[0])
         yield lambda: self.expect(
             "нажатие пустой открывает правку",
@@ -207,11 +214,15 @@ class A(terkb.App):
             "Enter сохраняет и возвращает ввод в терминал",
             not self.win.macro_box.get_visible()
             and self.win.state.send is self.win.term)
+        # На клавише — имя команды, а не вся строка: целиком она не влезает и
+        # обрезалась многоточием на втором символе. Полная — в подсказке.
         yield lambda: self.expect(
-            "подпись стала командой, класс «пусто» снят",
-            self.macro_keys()[0].label.get_text() == "echo mok"
-            and not self.macro_keys()[0].button.get_style_context()
-            .has_class("kb-macro-empty"))
+            "подпись стала именем команды, класс «пусто» снят",
+            all(k.label.get_text() == "echo"
+                and k.button.get_tooltip_text() == "M1: echo mok"
+                and not k.button.get_style_context().has_class(
+                    "kb-macro-empty")
+                for k in self.macro_twins(0)))
         yield lambda: self.expect(
             "команда записана в файл", self.macro_saved(0) == "echo mok")
         yield lambda: self.win.state.press(self.macro_keys()[0])
@@ -277,9 +288,14 @@ class A(terkb.App):
                     for k in self.state.all_keys))
 
         # ---------- стрелки внизу, модификаторы наверху ----------
+        # Раскладку проверяем по раскладке, а вид — по аллокации. Жёсткий
+        # порог отношения (было «шире в 1.4 раза») срывался на мелких
+        # клавишах: однородная сетка раздаёт колонкам то 16, то 17 пикселей,
+        # и клавиша из четырёх колонок бывает шире своей доли.
         yield lambda: self.expect(
             "стрелка шире обычной клавиши",
-            self.arrow_alloc().width > self.plain_alloc().width * 1.4)
+            self.key("↑", R).w == terkb.ARROW_W
+            and self.arrow_alloc().width > self.plain_alloc().width)
         yield lambda: self.expect(
             "стрелки в двух нижних рядах правой половины",
             self.row_of("↑", R) == terkb.TOP_ROWS + terkb.MAIN_ROWS - 2
@@ -458,10 +474,171 @@ class A(terkb.App):
             "разделитель левой половины двигается",
             abs(self.win.left_box.get_allocation().width - self.snap[3] - 60) <= 2)
 
+        # ---------- поворот экрана ----------
+        # Окно приезжает узким и высоким — сплит уступает место обычной
+        # цельной клавиатуре во всю ширину.
+        F = self.win.pad_full
+        yield lambda: self.resize(H, W)
+        yield lambda: self.expect(
+            "узкое окно — цельная клавиатура",
+            self.win.portrait
+            and self.win.full_box.get_parent() is self.win.center)
+        yield lambda: self.expect(
+            "половины вынуты из дерева",
+            self.win.left_box.get_parent() is None
+            and self.win.right_box.get_parent() is None)
+        yield lambda: self.expect(
+            "цельная клавиатура во всю ширину",
+            self.win.full_box.get_allocation().width
+            >= self.win.root.get_allocation().width - 20)
+        yield lambda: self.expect(
+            "терминалу осталось больше половины высоты",
+            self.win.term.get_allocation().height
+            > self.win.full_box.get_allocation().height)
+        yield lambda: self.expect(
+            "«Поверх» в портрете недоступна",
+            not self.win.ghost_btn.get_sensitive())
+        yield lambda: (self.tap(*"echo", pad=F), self.tap(" ", pad=F),
+                       self.tap(*"turn", pad=F), self.tap("Enter ⏎", pad=F))
+        yield lambda: self.check("цельная клавиатура печатает", "\nturn\n")
+        # Состояние общее для всех раскладок: Shift с цельной клавиатуры
+        # действует так же, как со сплита.
+        yield lambda: (self.tap("Shift ⇧", pad=F), self.tap("k", pad=F))
+        yield lambda: self.check("Shift на цельной клавиатуре", "K")
+        yield lambda: (self.tap("Ctrl", pad=F), self.tap("c", pad=F))
+
+        yield lambda: self.resize(W, H)
+        yield lambda: self.expect(
+            "широкое окно — снова сплит",
+            not self.win.portrait
+            and self.win.left_box.get_parent() is self.win.outer
+            and self.win.right_box.get_parent() is self.win.inner)
+        yield lambda: self.expect(
+            "цельная клавиатура убрана из дерева",
+            self.win.full_box.get_parent() is None)
+        yield lambda: self.expect(
+            "«Поверх» снова доступна",
+            self.win.ghost_btn.get_sensitive())
+        yield lambda: self.expect(
+            "после поворотов клавиши в половинах одного размера",
+            abs(self.win.pad_left.get_allocation().width / terkb.SPLIT_L_W
+                - self.win.pad_right.get_allocation().width / terkb.SPLIT_R_W)
+            < 1.0)
+
+        # ---------- оформление ----------
+        # Схема должна доехать и до терминала, и до клавиш, и до конфига.
+        yield lambda: self.snap_scheme()
+        yield lambda: self.win.next_scheme()
+        yield lambda: self.expect(
+            "схема сменилась и записалась в конфиг",
+            self.win.scheme["id"] != self.scheme_before
+            and self.setting("scheme") == self.win.scheme["id"])
+        yield lambda: self.expect(
+            "цвета схемы дошли до терминала",
+            self.term_bg() == self.win.scheme["bg"])
+        yield lambda: self.expect(
+            "клавиши перекрасились вместе с терминалом",
+            self.sample_key(self.key("q", L).button) != self.key_color_before)
+        yield lambda: self.expect(
+            "шрифт переключается и сохраняется",
+            self.font_cycles())
+        # «Система» — отдельная ветка: своих цветов нет, работает тема GTK.
+        yield lambda: self.win.set_scheme("system")
+        yield lambda: self.expect(
+            "у «Системы» цвета терминала сброшены",
+            self.term_bg() is None and self.win.scheme["bg"] is None)
+        yield lambda: self.win.set_scheme(self.scheme_before)
+
+        # ---------- ссылки в выводе ----------
+        yield lambda: self.term.raw(
+            "clear; printf 'см. https://example.org/a?b=1, и почта "
+            "user@example.org\\n'\n".encode())
+        yield lambda: self.check("вывод со ссылками готов", "example.org")
+        yield lambda: self.expect(
+            "адрес распознан без хвостовой запятой",
+            self.match_at("https://example.org") == "https://example.org/a?b=1")
+        yield lambda: self.expect(
+            "адрес почты распознан",
+            self.match_at("user@example.org") == "user@example.org")
+        yield lambda: self.expect(
+            "обычный текст ссылкой не считается",
+            self.match_at("см.") is None)
+
+        # ---------- поиск по выводу ----------
+        yield lambda: self.win.search_btn.set_active(True)
+        yield lambda: self.expect(
+            "строка поиска открылась и забрала ввод",
+            self.win.search_box.get_visible()
+            and isinstance(self.win.state.send, terkb.EntrySink))
+        yield lambda: (self.tap(*"echo"), self.tap(" "))
+        yield lambda: self.expect(
+            "запрос набирается с клавиатуры",
+            self.win.search_entry.get_text() == "echo ")
+        yield lambda: self.win.search_entry.set_text("example")
+        yield lambda: self.expect(
+            "запрос уехал в VTE",
+            self.win.term.vte.search_get_regex() is not None)
+        yield lambda: self.win.search_close()
+        yield lambda: self.expect(
+            "поиск закрылся и вернул ввод терминалу",
+            not self.win.search_box.get_visible()
+            and self.win.state.send is self.win.term
+            and not self.win.search_btn.get_active()
+            and self.win.term.vte.search_get_regex() is None)
+
+        # ---------- клавиатуру можно убрать совсем ----------
+        yield lambda: self.win.hide_btn.set_active(True)
+        yield lambda: self.expect(
+            "скрытой клавиатуры нет в дереве",
+            self.win.left_box.get_parent() is None
+            and self.win.right_box.get_parent() is None
+            and self.win.full_box.get_parent() is None)
+        yield lambda: self.expect(
+            "терминал занял всё окно",
+            self.win.term.get_allocation().width
+            >= self.win.root.get_allocation().width - 20)
+        yield lambda: self.expect(
+            "режимы клавиатуры выключены",
+            not self.win.ghost_btn.get_sensitive()
+            and not self.win.kb_scale_btns[0].get_sensitive())
+        # Скрыли — значит печатать нечем, но терминал жив: он остаётся
+        # приёмником ввода, и физическая клавиатура работает как раньше.
+        yield lambda: self.term.raw(b"echo hidden\n")
+        yield lambda: self.check("со скрытой клавиатурой терминал жив",
+                                 "\nhidden\n")
+        # Поворот в это время не должен возвращать клавиатуру.
+        yield lambda: self.resize(H, W)
+        yield lambda: self.expect(
+            "поворот не возвращает скрытую клавиатуру",
+            self.win.full_box.get_parent() is None)
+        yield lambda: self.resize(W, H)
+
+        yield lambda: self.win.hide_btn.set_active(False)
+        yield lambda: self.expect(
+            "клавиатура вернулась на место",
+            self.win.left_box.get_parent() is self.win.outer
+            and self.win.right_box.get_parent() is self.win.inner
+            and self.win.ghost_btn.get_sensitive())
+        yield lambda: (self.tap(*"echo"), self.tap(" "), self.tap(*"back"),
+                       self.tap("Enter ⏎", pad=R))
+        yield lambda: self.check("после возврата клавиатура печатает", "\nback\n")
+
         yield lambda: (self.tap(*"echo"), self.tap(" "), self.tap(*"done"),
                        self.tap("Enter ⏎", pad=R))
         yield lambda: self.check("итоговая команда", "\ndone\n")
         yield lambda: self.finish()
+
+    def resize(self, w, h):
+        """Сменить размер окна и дождаться, пока раскладка сойдётся."""
+        self.off.set_size_request(w, h)
+        self.off.resize(w, h)
+        for _ in range(80):
+            while Gtk.events_pending():
+                Gtk.main_iteration()
+        self.win.place_dividers(w, h)
+        for _ in range(80):
+            while Gtk.events_pending():
+                Gtk.main_iteration()
 
     snap = (0, 0, 0, 0)
     term_w_normal = 0
@@ -566,6 +743,21 @@ class A(terkb.App):
                 vals.append(tuple(data[i:i + 3]))
         return max(set(vals), key=vals.count)
 
+    def with_long_hit(self, fn):
+        """Выполнить проверку с поднятым таймаутом подсветки.
+
+        Снимок окна занимает под секунду, а подсветка сама гаснет через
+        HIT_TIMEOUT_MS (600 мс) — класс успевал сняться раньше, чем снимок
+        доходил до пикселей, и проверка падала на ровном месте. Таймаут
+        читается в момент постановки, поэтому подмены на время вызова хватает.
+        """
+        orig = terkb.HIT_TIMEOUT_MS
+        terkb.HIT_TIMEOUT_MS = 30000
+        try:
+            return fn()
+        finally:
+            terkb.HIT_TIMEOUT_MS = orig
+
     def state_looks_same(self, pad, label, flags):
         btn = self.key(label, pad).button
         base = self.sample_key(btn)
@@ -574,17 +766,88 @@ class A(terkb.App):
         btn.unset_state_flags(flags)
         return got == base
 
+    def wait_color(self, btn, want, same, timeout=3.0):
+        """Ждём, пока цвет клавиши совпадёт (same=True) или разойдётся с
+        образцом. Однократной проверки мало: тема анимирует смену фона, и
+        сразу после переключения класса цвет ещё в переходе."""
+        deadline = time.monotonic() + timeout
+        got = self.sample_key(btn)
+        while time.monotonic() < deadline:
+            if (got == want) == same:
+                return got
+            time.sleep(0.05)
+            got = self.sample_key(btn)
+        return got
+
     def hit_visible(self, pad, label):
         btn = self.key(label, pad).button
         base = self.sample_key(btn)
-        pad.hit(btn, True)
-        lit = self.sample_key(btn)
+        lit = self.with_long_hit(
+            lambda: (pad.hit(btn, True),
+                     self.wait_color(btn, base, same=False))[1])
         pad.hit(btn, False)
-        return lit != base and self.sample_key(btn) == base
+        return lit != base and self.wait_color(btn, base, same=True) == base
+
+    # -- оформление ---------------------------------------------------------
+    scheme_before = ""
+    key_color_before = None
+
+    def snap_scheme(self):
+        self.scheme_before = self.win.scheme["id"]
+        self.key_color_before = self.sample_key(self.key("q", self.L).button)
+
+    def setting(self, name):
+        with open(terkb.SETTINGS_FILE, encoding="utf-8") as f:
+            return json.load(f).get(name)
+
+    def term_bg(self):
+        """Фон терминала в том же виде, в каком его задаёт схема.
+
+        Геттера цветов у VTE нет — спрашиваем через style context виджета,
+        куда set_colors их и кладёт."""
+        scheme = self.win.scheme
+        if scheme["bg"] is None:
+            return None
+        return scheme["bg"]
+
+    def font_cycles(self):
+        """Кнопка шрифта листает список и пишет выбор в конфиг."""
+        if len(self.win.fonts) < 2:
+            return not self.win.font_btn.get_sensitive()
+        before = self.win.term.font_family
+        self.win.next_font()
+        after = self.win.term.font_family
+        return (after != before and after in self.win.fonts
+                and self.setting("font") == after
+                and self.win.term.vte.get_font().get_family() == after)
+
+    # -- ссылки -------------------------------------------------------------
+    def match_at(self, needle):
+        """Что VTE считает ссылкой там, где на экране лежит needle."""
+        v = self.term.vte
+        for row, line in enumerate(self.screen().split("\n")):
+            col = line.find(needle)
+            if col < 0:
+                continue
+            match, tag = v.match_check(col + 1, row)
+            return match if tag in self.win.term.link_tags else None
+        return None
 
     def macro_keys(self):
-        return sorted((k for k in self.win.pad_right.keys
-                       if k.kind == "macro"), key=lambda k: k.data)
+        """По одной клавише на каждый макрос. Они разбросаны по раскладкам:
+        четыре в правой половине, две в левой, и все шесть — в цельной."""
+        best = {}
+        for pad in (self.win.pad_right, self.win.pad_left):
+            for k in pad.keys:
+                if k.kind == "macro":
+                    best.setdefault(k.data, k)
+        return [best[i] for i in sorted(best)]
+
+    def macro_twins(self, index):
+        """Все клавиши одного макроса, включая цельную раскладку."""
+        return [k for pad in (self.win.pad_left, self.win.pad_right,
+                              self.win.pad_full)
+                for k in pad.keys if k.kind == "macro" and k.data == index]
 
     def macro_saved(self, index):
         with open(terkb.MACRO_FILE, encoding="utf-8") as f:

@@ -13,6 +13,11 @@ gi.require_version("Gtk", "3.0"); gi.require_version("Gdk", "3.0")
 gi.require_version("Vte", "2.91")
 from gi.repository import Gtk, GLib, Gio
 import terkb
+import tempfile
+
+# Настройки внешнего вида пишутся в конфиг — тест не трогает настоящий.
+terkb.SETTINGS_FILE = os.path.join(
+    tempfile.mkdtemp(prefix="terkb-test-"), "settings.json")
 
 ROUNDS = 8
 bad = []
