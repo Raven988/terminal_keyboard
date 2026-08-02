@@ -1,53 +1,52 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!-- Иконка terkb: две половины клавиатуры по краям, терминал между ними —
-     то же, что видно в окне. Корпус светлый и цветной намеренно: тёмно-серый
-     сливался с фоном дока, и закреплённый значок выглядел чёрным пятном.
-     Деталей мало: на 16 пикселях клавиши сходятся в текстуру, и узнаваемым
-     остаётся силуэт «полосы по бокам, тёмное окно в середине».
-     Рисунок повторяет make-icons.py — правя одно, правьте и другое. -->
+     то же, что видно в окне. Деталей намеренно мало: на 16 пикселях клавиши
+     сливаются в текстуру, и узнаваемым остаётся силуэт «полосы по бокам,
+     тёмное окно в середине». -->
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" width="128" height="128">
   <defs>
     <linearGradient id="body" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0" stop-color="#7d6cf2"/>
-      <stop offset="1" stop-color="#4a37c8"/>
+      <stop offset="0" stop-color="#3a3f4e"/>
+      <stop offset="1" stop-color="#272b36"/>
     </linearGradient>
-    <linearGradient id="screen" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0" stop-color="#181b22"/>
-      <stop offset="1" stop-color="#0c0e12"/>
+    <linearGradient id="glass" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#15171d"/>
+      <stop offset="1" stop-color="#0d0f13"/>
     </linearGradient>
   </defs>
 
-  <!-- корпус -->
-  <rect x="6" y="6" width="116" height="116" rx="26" fill="url(#body)"/>
+  <!-- корпус; светлый кант — чтобы на тёмном фоне иконка не сливалась в пятно -->
+  <rect x="5.5" y="11.5" width="117" height="105" rx="14.5" fill="url(#body)"
+        stroke="#79839a" stroke-width="3"/>
 
   <!-- экран терминала -->
-  <rect x="47" y="22" width="34" height="84" rx="6" fill="url(#screen)"/>
+  <rect x="45" y="20" width="38" height="88" rx="5" fill="url(#glass)"/>
   <!-- приглашение и курсор: единственная яркая деталь, видна и в мелком размере -->
-  <path d="M54 38 l7 7 -7 7" fill="none" stroke="#50fa7b" stroke-width="5"
+  <path d="M53 36 l7 6 -7 6" fill="none" stroke="#50fa7b" stroke-width="4.5"
         stroke-linecap="round" stroke-linejoin="round"/>
-  <rect x="64" y="41" width="11" height="5" rx="2.5" fill="#50fa7b"/>
-  <g fill="#ffffff" fill-opacity="0.45">
-    <rect x="54" y="60" width="20" height="4.5" rx="2.25"/>
-    <rect x="54" y="71" width="14" height="4.5" rx="2.25"/>
-    <rect x="54" y="82" width="17" height="4.5" rx="2.25"/>
-    <rect x="54" y="93" width="10" height="4.5" rx="2.25"/>
+  <rect x="64" y="38" width="12" height="5" rx="2.5" fill="#50fa7b"/>
+  <g fill="#6a7385">
+    <rect x="53" y="54" width="23" height="4.5" rx="2.25"/>
+    <rect x="53" y="65" width="16" height="4.5" rx="2.25"/>
+    <rect x="53" y="76" width="20" height="4.5" rx="2.25"/>
+    <rect x="53" y="87" width="11" height="4.5" rx="2.25"/>
   </g>
 
   <!-- левая половина клавиатуры -->
-  <g fill="#ffffff" fill-opacity="0.55">
-    <rect x="14" y="32" width="25" height="12" rx="4"/>
-    <rect x="14" y="48" width="25" height="12" rx="4"/>
-    <rect x="14" y="64" width="25" height="12" rx="4"/>
-    <rect x="14" y="80" width="25" height="12" rx="4"/>
-    <rect x="14" y="96" width="25" height="12" rx="4"/>
+  <g fill="#596376">
+    <rect x="12" y="30" width="24" height="12" rx="3.5"/>
+    <rect x="12" y="46" width="24" height="12" rx="3.5"/>
+    <rect x="12" y="62" width="24" height="12" rx="3.5"/>
+    <rect x="12" y="78" width="24" height="12" rx="3.5"/>
+    <rect x="12" y="94" width="24" height="12" rx="3.5"/>
   </g>
 
   <!-- правая половина: нижняя клавиша выделена — там Enter -->
-  <g fill="#ffffff" fill-opacity="0.55">
-    <rect x="89" y="32" width="25" height="12" rx="4"/>
-    <rect x="89" y="48" width="25" height="12" rx="4"/>
-    <rect x="89" y="64" width="25" height="12" rx="4"/>
-    <rect x="89" y="80" width="25" height="12" rx="4"/>
+  <g fill="#596376">
+    <rect x="92" y="30" width="24" height="12" rx="3.5"/>
+    <rect x="92" y="46" width="24" height="12" rx="3.5"/>
+    <rect x="92" y="62" width="24" height="12" rx="3.5"/>
+    <rect x="92" y="78" width="24" height="12" rx="3.5"/>
   </g>
-  <rect x="89" y="96" width="25" height="12" rx="4" fill="#50fa7b"/>
+  <rect x="92" y="94" width="24" height="12" rx="3.5" fill="#7c6cf0"/>
 </svg>
