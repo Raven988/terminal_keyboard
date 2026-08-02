@@ -15,9 +15,9 @@ import terkb
 # Макросы пишутся в файл — тест не должен трогать настоящий конфиг.
 import tempfile
 _MACRO_DIR = tempfile.mkdtemp(prefix="terkb-test-")
-terkb.MACRO_FILE = os.path.join(_MACRO_DIR, "macros.json")
+terkb.config.MACRO_FILE = os.path.join(_MACRO_DIR, "macros.json")
 # Схема и шрифт тоже пишутся в конфиг — уводим и их.
-terkb.SETTINGS_FILE = os.path.join(_MACRO_DIR, "settings.json")
+terkb.config.SETTINGS_FILE = os.path.join(_MACRO_DIR, "settings.json")
 
 W, H = 1500, 950
 results = []
@@ -751,12 +751,12 @@ class A(terkb.App):
         доходил до пикселей, и проверка падала на ровном месте. Таймаут
         читается в момент постановки, поэтому подмены на время вызова хватает.
         """
-        orig = terkb.HIT_TIMEOUT_MS
-        terkb.HIT_TIMEOUT_MS = 30000
+        orig = terkb.keypad.HIT_TIMEOUT_MS
+        terkb.keypad.HIT_TIMEOUT_MS = 30000
         try:
             return fn()
         finally:
-            terkb.HIT_TIMEOUT_MS = orig
+            terkb.keypad.HIT_TIMEOUT_MS = orig
 
     def state_looks_same(self, pad, label, flags):
         btn = self.key(label, pad).button
@@ -797,7 +797,7 @@ class A(terkb.App):
         self.key_color_before = self.sample_key(self.key("q", self.L).button)
 
     def setting(self, name):
-        with open(terkb.SETTINGS_FILE, encoding="utf-8") as f:
+        with open(terkb.config.SETTINGS_FILE, encoding="utf-8") as f:
             return json.load(f).get(name)
 
     def term_bg(self):
@@ -850,7 +850,7 @@ class A(terkb.App):
                 for k in pad.keys if k.kind == "macro" and k.data == index]
 
     def macro_saved(self, index):
-        with open(terkb.MACRO_FILE, encoding="utf-8") as f:
+        with open(terkb.config.MACRO_FILE, encoding="utf-8") as f:
             return json.load(f)[index]
 
     def macro_cancel_keeps(self):
@@ -917,7 +917,7 @@ class A(terkb.App):
 
     def wait_hit_gone(self, pad, label):
         """Крутим главный цикл, пока не сработает таймаут подсветки."""
-        deadline = time.monotonic() + (terkb.HIT_TIMEOUT_MS / 1000.0) + 1.0
+        deadline = time.monotonic() + (terkb.keypad.HIT_TIMEOUT_MS / 1000.0) + 1.0
         while time.monotonic() < deadline:
             while Gtk.events_pending():
                 Gtk.main_iteration()

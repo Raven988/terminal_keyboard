@@ -17,9 +17,9 @@ from gi.repository import Gtk, GLib, Gio, Vte
 import terkb
 
 _DIR = tempfile.mkdtemp(prefix="terkb-test-")
-terkb.MACRO_FILE = os.path.join(_DIR, "macros.json")
-terkb.SETTINGS_FILE = os.path.join(_DIR, "settings.json")
-terkb.LAYOUT_FILE = os.path.join(_DIR, "layout.json")
+terkb.config.MACRO_FILE = os.path.join(_DIR, "macros.json")
+terkb.config.SETTINGS_FILE = os.path.join(_DIR, "settings.json")
+terkb.config.LAYOUT_FILE = os.path.join(_DIR, "layout.json")
 
 # Метка уезжает далеко вверх: важно, что поиск достаёт её из прокрутки, а не
 # находит на видимом экране.

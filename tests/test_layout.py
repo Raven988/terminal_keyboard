@@ -17,9 +17,9 @@ from gi.repository import Gtk, Gio
 import terkb
 
 _DIR = tempfile.mkdtemp(prefix="terkb-test-")
-terkb.MACRO_FILE = os.path.join(_DIR, "macros.json")
-terkb.SETTINGS_FILE = os.path.join(_DIR, "settings.json")
-terkb.LAYOUT_FILE = os.path.join(_DIR, "layout.json")
+terkb.config.MACRO_FILE = os.path.join(_DIR, "macros.json")
+terkb.config.SETTINGS_FILE = os.path.join(_DIR, "settings.json")
+terkb.config.LAYOUT_FILE = os.path.join(_DIR, "layout.json")
 
 results = []
 
@@ -39,10 +39,10 @@ def places(win):
 
 def edit(fn):
     """Прочитать layout.json, дать функции его поправить, записать обратно."""
-    with open(terkb.LAYOUT_FILE, encoding="utf-8") as f:
+    with open(terkb.config.LAYOUT_FILE, encoding="utf-8") as f:
         data = json.load(f)
     fn(data)
-    with open(terkb.LAYOUT_FILE, "w", encoding="utf-8") as f:
+    with open(terkb.config.LAYOUT_FILE, "w", encoding="utf-8") as f:
         json.dump(data, f, ensure_ascii=False)
 
 
@@ -65,7 +65,7 @@ class A(terkb.App):
 
         # 1. Круг: выгрузили встроенные, подняли окно — раскладка та же.
         terkb.dump_layouts()
-        expect("файл раскладок создан", os.path.exists(terkb.LAYOUT_FILE))
+        expect("файл раскладок создан", os.path.exists(terkb.config.LAYOUT_FILE))
         expect("выгрузка и загрузка ничего не теряют",
                places(self.build()) == builtin)
 
@@ -83,7 +83,7 @@ class A(terkb.App):
                self.build().pad_right.touchpad_at == (10, 1, 4, 2))
 
         # 4. Мусор вместо файла — работаем на встроенных.
-        with open(terkb.LAYOUT_FILE, "w", encoding="utf-8") as f:
+        with open(terkb.config.LAYOUT_FILE, "w", encoding="utf-8") as f:
             f.write("{это не json")
         expect("битый файл не оставляет без клавиатуры",
                places(self.build()) == builtin)

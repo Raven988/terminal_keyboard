@@ -14,10 +14,10 @@ if [ "$1" = "--uninstall" ]; then
     exit 0
 fi
 
-chmod +x "$SRC/terkb.py"
+chmod +x "$SRC/terkb-run"
 mkdir -p "$APPS"
-sed "s|^Exec=.*|Exec=$SRC/terkb.py|" "$SRC/terkb.desktop" > "$DESKTOP"
+sed "s|^Exec=.*|Exec=$SRC/terkb-run|" "$SRC/terkb.desktop" > "$DESKTOP"
 update-desktop-database "$APPS" 2>/dev/null || true
 
 echo "Установлено: $DESKTOP"
-echo "Запуск: $SRC/terkb.py  (или «terkb» в меню приложений)"
+echo "Запуск: $SRC/terkb-run  (или «terkb» в меню приложений)"

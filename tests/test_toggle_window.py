@@ -16,7 +16,7 @@ import terkb
 import tempfile
 
 # Настройки внешнего вида пишутся в конфиг — тест не трогает настоящий.
-terkb.SETTINGS_FILE = os.path.join(
+terkb.config.SETTINGS_FILE = os.path.join(
     tempfile.mkdtemp(prefix="terkb-test-"), "settings.json")
 
 ROUNDS = 8
