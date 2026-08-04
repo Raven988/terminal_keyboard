@@ -18,7 +18,8 @@ VTE-виджету напрямую — без ydotool/uinput и без проб
     keypad    сетка клавиш, полоса перемотки
     layouts   встроенные раскладки и обмен с layout.json
     terminal  VTE и приёмник ввода для встроенных строк правки
-    window    окно: панель, режимы, поиск, правка макросов
+    tabs      вкладки: полоса кнопок и стопка терминалов
+    window    окно: панель, вкладки, режимы, поиск, правка макросов
     app       приложение GTK и разбор командной строки
 
 Имена, которыми пользуются снаружи, собраны здесь — кроме путей к файлам и
@@ -33,7 +34,7 @@ gi.require_version("Gdk", "3.0")
 gi.require_version("Vte", "2.91")
 
 from . import config, geometry, keypad, keys, layouts, schemes  # noqa: E402
-from . import styles, terminal, window                          # noqa: E402
+from . import styles, tabs, terminal, window                    # noqa: E402
 from .app import APP_ID, App, main                              # noqa: E402
 from .config import (SETTINGS_SPEC, load_macros, load_settings,  # noqa: E402
                      save_macros, save_settings)
@@ -47,5 +48,6 @@ from .schemes import (DEFAULT_SCHEME, FONT_CHOICES, FONT_MAX,    # noqa: E402
                       FONT_MIN, SCHEMES, available_fonts, is_dark, luma,
                       mix, scheme_by_id)
 from .styles import CSS, GHOST_CSS, GUARD_CSS, SKIN_CSS, skin_colors  # noqa: E402
+from .tabs import MAX_TABS, Tab, Tabs, short_title                # noqa: E402
 from .terminal import (LINK_PATTERNS, EntrySink, Terminal)       # noqa: E402
 from .window import Window                                       # noqa: E402

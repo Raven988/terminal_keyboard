@@ -18,6 +18,7 @@ from .keys import KeyState
 from .layouts import build_layout, load_layouts
 from .schemes import SCHEMES, available_fonts, is_dark, scheme_by_id
 from .styles import GHOST_CSS, SKIN_CSS, skin_colors
+from .tabs import MAX_TABS, Tabs
 from .terminal import LINK_REGEX_FLAGS, EntrySink, Terminal
 
 
@@ -31,12 +32,19 @@ class Window(Gtk.ApplicationWindow):
         self.settings = load_settings()
         self.set_default_size(self.settings["width"], self.settings["height"])
         self.fonts = available_fonts()
-        self.term = Terminal()
-        self.term.font_size = self.settings["font_size"]
-        self.term.font_family = (self.settings["font"]
-                                 if self.settings["font"] in self.fonts
-                                 else "Monospace")
-        self.term.apply_font()
+        # Оформление хранит окно, а не терминал: терминалов теперь несколько,
+        # и новая вкладка должна открываться с тем же шрифтом и той же схемой,
+        # что и соседние.
+        self.font_size = self.settings["font_size"]
+        self.font_family = (self.settings["font"]
+                            if self.settings["font"] in self.fonts
+                            else "Monospace")
+        self.scheme = None            # ставится set_scheme ниже
+        # Вкладки: терминалы в стопке, кнопки — отдельной полосой в шапке.
+        # Обратные вызовы навешиваем позже: они трогают состояние клавиатуры
+        # и строку поиска, а тех ещё нет.
+        self.tabs = Tabs()
+        self.tabs.add(self.make_terminal())
         # Доля ширины под клавиатуру и её множитель: и то, и другое правится
         # кнопками ⌨−/⌨+ и переживает перезапуск.
         self.kb_fraction = self.settings["kb_fraction"]
@@ -89,8 +97,12 @@ class Window(Gtk.ApplicationWindow):
         self.bar = self.toolbar()
         self.center.pack_start(self.macro_editor(), False, False, 0)
         self.center.pack_start(self.search_bar(), False, False, 0)
-        self.center.pack_start(self.term, True, True, 0)
+        self.center.pack_start(self.tabs.stack, True, True, 0)
         self.state.on_macro_edit = self.edit_macro
+        # Всё, чего касаются эти обработчики, собрано — можно подключать.
+        self.tabs.on_switch = self.on_tab_switch
+        self.tabs.on_change = self.on_tabs_changed
+        self.tabs.on_empty = self.close
 
         # Два вложенных Paned: левая половина | (терминал | правая половина)
         # Два вложенных Paned: левая половина | (терминал | правая половина).
@@ -119,6 +131,9 @@ class Window(Gtk.ApplicationWindow):
         # её своими GdkWindow.
         self.root = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
         self.root.pack_start(self.bar, False, False, 0)
+        # Полоса вкладок — под панелью, а не над ней: так кнопки остаются на
+        # месте, когда вкладка открывается или закрывается.
+        self.root.pack_start(self.tabs.strip, False, False, 0)
         self.root.pack_start(self.overlay, True, True, 0)
         self.add(self.root)
 
@@ -138,7 +153,7 @@ class Window(Gtk.ApplicationWindow):
         self._prefer_dark = bool(gset and gset.get_property(
             "gtk-application-prefer-dark-theme"))
         self.set_scheme(self.settings["scheme"], save=False)
-        self.set_font(self.term.font_family, save=False)
+        self.set_font(self.font_family, save=False)
         for b in self.alpha_btns:
             b.set_sensitive(False)
 
@@ -161,8 +176,89 @@ class Window(Gtk.ApplicationWindow):
             self.ghost_btn.set_active(True)
 
         self.state.refresh_macros()
-        self.term.spawn(self.close)
+        # Ускорители настоящей клавиатуры: обработчик на окне видит событие
+        # раньше, чем оно уходит в терминал.
+        self.connect("key-press-event", self.on_key)
+        self.spawn(self.term)
         self.term.vte.grab_focus()
+
+    # -- вкладки -------------------------------------------------------------
+    @property
+    def term(self):
+        """Терминал открытой вкладки. Всё остальное окно работает с ним:
+        клавиатура шлёт ввод сюда, поиск ищет здесь, полоса перемотки листает
+        его."""
+        return self.tabs.current
+
+    def make_terminal(self):
+        """Терминал с текущим оформлением: новая вкладка не должна отличаться
+        от соседних ни шрифтом, ни цветами."""
+        term = Terminal()
+        term.font_family = self.font_family
+        term.font_size = self.font_size
+        term.apply_font()
+        if self.scheme is not None:
+            term.apply_scheme(self.scheme)
+        return term
+
+    def spawn(self, term):
+        """Поднять шелл во вкладке. Вышел шелл — вкладка закрывается; была
+        последняя — закрывается окно (это делает Tabs через on_empty)."""
+        term.spawn(lambda t=term: self.tabs.close(t))
+
+    def new_tab(self):
+        if len(self.tabs.tabs) >= MAX_TABS:
+            return
+        term = self.make_terminal()
+        self.tabs.add(term)
+        self.spawn(term)
+        term.vte.grab_focus()
+
+    def close_tab(self):
+        if self.term is not None:
+            self.tabs.close(self.term)
+
+    def on_tab_switch(self, old, new):
+        """Перешли на другую вкладку."""
+        if old is not None:
+            old.vte.search_set_regex(None, 0)     # запрос был отдан ей
+        if not isinstance(self.state.send, EntrySink):
+            self.state.send = new                 # клавиатура печатает сюда
+        if self.search_box.get_visible():
+            self.search_apply()
+        new.vte.grab_focus()
+
+    def on_tabs_changed(self):
+        """Вкладок стало больше или меньше: полоса появилась или исчезла, и
+        клавиатуре досталось другое количество высоты."""
+        self.new_btn.set_sensitive(len(self.tabs.tabs) < MAX_TABS)
+        self._laid_out = (0, 0)
+        self.schedule_layout()
+
+    def on_key(self, _w, event):
+        """Ускорители для настоящей клавиатуры.
+
+        Экранной они не нужны — у неё есть кнопки панели, да и ввод она отдаёт
+        VTE напрямую, мимо окна.
+        """
+        mods = event.state & Gtk.accelerator_get_default_mod_mask()
+        ctrl = Gdk.ModifierType.CONTROL_MASK
+        if mods == ctrl | Gdk.ModifierType.SHIFT_MASK:
+            key = Gdk.keyval_to_lower(event.keyval)
+            if key == Gdk.KEY_t:
+                self.new_tab()
+                return True
+            if key == Gdk.KEY_w:
+                self.close_tab()
+                return True
+        elif mods == ctrl:
+            if event.keyval == Gdk.KEY_Page_Up:
+                self.tabs.step(-1)
+                return True
+            if event.keyval == Gdk.KEY_Page_Down:
+                self.tabs.step(1)
+                return True
+        return False
 
     def on_destroy(self, *_a):
         """Запомнить размер окна. В полном экране и в развёрнутом окне
@@ -179,6 +275,9 @@ class Window(Gtk.ApplicationWindow):
         # строку, и минимум равен ширине одной кнопки.
         bar = Gtk.FlowBox()
         bar.get_style_context().add_class("terkb-bar")
+        # Свой класс поверх общего: цвета схемы приходят из .terkb-bar, а
+        # размер значков — только сюда, полосы вкладок он не касается.
+        bar.get_style_context().add_class("terkb-tools")
         bar.set_selection_mode(Gtk.SelectionMode.NONE)
         bar.set_min_children_per_line(1)
         bar.set_max_children_per_line(20)
@@ -199,14 +298,22 @@ class Window(Gtk.ApplicationWindow):
             place(b)
             return b
 
-        btn("A−", lambda: self.zoom_font(-1), "Уменьшить шрифт терминала")
-        btn("A+", lambda: self.zoom_font(1), "Увеличить шрифт терминала")
+        self.new_btn = btn("＋", self.new_tab,
+                           "Новая вкладка (Ctrl+Shift+T). Между вкладками — "
+                           "их полоса под панелью или Ctrl+PgUp/PgDn")
 
-        # Циклеры: на планшете список выбирать пальцем неудобно, а одна кнопка
-        # с названием текущего значения и попадается легко, и сама показывает,
-        # что сейчас выбрано.
-        self.scheme_btn = btn("", self.next_scheme, "")
-        self.font_btn = btn("", self.next_font, "")
+        btn("A−", lambda: self.zoom_font(-1), "Шрифт терминала мельче")
+        btn("A+", lambda: self.zoom_font(1), "Шрифт терминала крупнее")
+
+        # Циклеры: на планшете выбирать пункт списка пальцем неудобно, а одна
+        # кнопка и попадается легко, и листает по кругу. Что выбрано сейчас,
+        # написано в подсказке — её ставят set_scheme и set_font.
+        #
+        # Кисть, а не палитра (🎨): палитра рисуется только цветным эмодзи и
+        # выбивалась из ряда, а кисть с текстовым селектором (U+FE0E, после
+        # знака его не видно) идёт обычным глифом и красится в цвет подписей.
+        self.scheme_btn = btn("🖌︎", self.next_scheme, "")
+        self.font_btn = btn("Aa", self.next_font, "")
         if len(self.fonts) < 2:
             self.font_btn.set_sensitive(False)
 
@@ -224,19 +331,23 @@ class Window(Gtk.ApplicationWindow):
                 "Клавиши прозрачнее"),
         ]
 
-        self.ghost_btn = Gtk.ToggleButton(label="Поверх")
+        self.ghost_btn = Gtk.ToggleButton(label="⧉")
         self.ghost_btn.set_tooltip_text(
-            "Терминал во всю ширину, клавиши прозрачные поверх него")
+            "Поверх: терминал во всю ширину, клавиши прозрачные поверх него")
         self.ghost_btn.connect("toggled", self.on_ghost)
         place(self.ghost_btn)
 
-        self.hide_btn = Gtk.ToggleButton(label="Скрыть ⌨")
+        # Стрелка показывает, куда уедет клавиатура: вниз — убрать, вверх —
+        # вернуть. Подпись переставляет set_hidden.
+        self.hide_btn = Gtk.ToggleButton(label="⌨↓")
         self.hide_btn.set_tooltip_text(
             "Убрать клавиатуру совсем: терминал на всё окно")
         self.hide_btn.connect("toggled", self.on_hide_kb)
         place(self.hide_btn)
 
-        self.search_btn = Gtk.ToggleButton(label="🔍")
+        # Тот же текстовый селектор, что и у кисти: без него лупа приезжает
+        # цветным эмодзи и не красится вместе с остальной панелью.
+        self.search_btn = Gtk.ToggleButton(label="🔍︎")
         self.search_btn.set_tooltip_text("Искать по выводу терминала")
         self.search_btn.connect("toggled", self.on_search)
         place(self.search_btn)
@@ -380,7 +491,10 @@ class Window(Gtk.ApplicationWindow):
             self.ghost_btn.set_active(False)
         self.mount_keyboard()
         self.update_mode_buttons()
-        self.hide_btn.set_label("Вернуть ⌨" if on else "Скрыть ⌨")
+        self.hide_btn.set_label("⌨↑" if on else "⌨↓")
+        self.hide_btn.set_tooltip_text(
+            "Вернуть клавиатуру" if on
+            else "Убрать клавиатуру совсем: терминал на всё окно")
         self.store(hidden=on)
         self._laid_out = (0, 0)
         self.schedule_layout()
@@ -567,7 +681,8 @@ class Window(Gtk.ApplicationWindow):
 
     def set_scheme(self, ident, save=True):
         self.scheme = scheme_by_id(ident) or SCHEMES[0]
-        self.term.apply_scheme(self.scheme)
+        for term in self.tabs.terms:      # схема одна на все вкладки
+            term.apply_scheme(self.scheme)
         self.apply_ghost_css()
         # Системные виджеты (выпадашки, тултипы, курсор в поле правки) нашей
         # таблицей не покрыты — им остаётся сказать только, светлая схема или
@@ -578,7 +693,8 @@ class Window(Gtk.ApplicationWindow):
                 "gtk-application-prefer-dark-theme",
                 self._prefer_dark if self.scheme["bg"] is None
                 else is_dark(self.scheme))
-        self.scheme_btn.set_label(self.scheme["name"])
+        # Название схемы — только в подсказке: на кнопке значок, а какая схема
+        # выбрана, и так видно по цвету окна.
         self.scheme_btn.set_tooltip_text(
             "Схема: %s. Нажать — следующая" % self.scheme["name"])
         if save:
@@ -590,11 +706,12 @@ class Window(Gtk.ApplicationWindow):
         self.term.vte.grab_focus()
 
     def set_font(self, family, save=True):
-        self.term.set_font_family(family)
-        # «JetBrains Mono» в кнопку не влезает, а слово Mono у всех одинаковое
-        # и ничего не различает.
-        short = family.replace(" Sans Mono", "").replace(" Mono", "")
-        self.font_btn.set_label(short if short != "Monospace" else "Моно")
+        self.font_family = family
+        for term in self.tabs.terms:      # шрифт один на все вкладки
+            term.set_font_family(family)
+        # Название шрифта — только в подсказке: полное имя вроде «JetBrains
+        # Mono» в кнопку не влезало и обрезалось, а слово Mono у всех
+        # одинаковое и ничего не различало.
         self.font_btn.set_tooltip_text(
             "Шрифт: %s. Нажать — следующий" % family)
         if save:
@@ -603,14 +720,18 @@ class Window(Gtk.ApplicationWindow):
     def next_font(self):
         if len(self.fonts) < 2:
             return
-        cur = self.term.font_family
+        cur = self.font_family
         i = self.fonts.index(cur) + 1 if cur in self.fonts else 0
         self.set_font(self.fonts[i % len(self.fonts)])
         self.term.vte.grab_focus()
 
     def zoom_font(self, delta):
-        self.term.zoom(delta)
-        self.store(font_size=self.term.font_size)
+        # Размер меняем во всех вкладках сразу, а границы оставляем терминалу:
+        # они у него уже есть, и на упоре все вкладки останутся вровень.
+        for term in self.tabs.terms:
+            term.zoom(delta)
+        self.font_size = self.term.font_size
+        self.store(font_size=self.font_size)
         self.term.vte.grab_focus()
 
     def store(self, **kw):
@@ -627,21 +748,29 @@ class Window(Gtk.ApplicationWindow):
         self.store(ghost_alpha=a)
         self.term.vte.grab_focus()
 
-    def bar_height(self, w):
-        """Высота панели. До первого размещения аллокации ещё нет, а считать
-        по ней нельзя: раскладка сойдётся на заниженной высоте панели, клавиши
-        получатся крупнее, чем влезает, и половины разъедутся — у левой рядов
-        больше, и AspectFrame ужмёт её сильнее правой. Поэтому спрашиваем
+    def strip_height(self, widget, w):
+        """Высота полосы в шапке. До первого размещения аллокации ещё нет, а
+        считать по ней нельзя: раскладка сойдётся на заниженной высоте панели,
+        клавиши получатся крупнее, чем влезает, и половины разъедутся — у левой
+        рядов больше, и AspectFrame ужмёт её сильнее правой. Поэтому спрашиваем
         предпочтительную высоту под известную ширину."""
-        h = self.bar.get_allocation().height
+        h = widget.get_allocation().height
         if h > 1:
             return h
-        return self.bar.get_preferred_height_for_width(max(1, w))[1]
+        return widget.get_preferred_height_for_width(max(1, w))[1]
+
+    def bar_height(self, w):
+        """Высота всей шапки: панель кнопок и, если вкладок больше одной, их
+        полоса."""
+        h = self.strip_height(self.bar, w)
+        if self.tabs.strip.get_visible():
+            h += self.strip_height(self.tabs.strip, w)
+        return h
 
     def avail_height(self, w, h):
         """Высота, доступная клавиатуре.
 
-        h — высота всего окна, а панель лежит над клавиатурой во всю ширину,
+        h — высота всего окна, а шапка лежит над клавиатурой во всю ширину,
         и в обычном режиме, и в наложении.
         """
         return h - self.bar_height(w)

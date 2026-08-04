@@ -53,6 +53,28 @@ CSS = """
   color: alpha(@theme_fg_color, 0.45);
 }
 .kb-editor { padding: 2px 4px; }
+/* На кнопках панели значки, а не подписи: без своей ширины они ужимаются до
+   размера одного символа, и пальцем в них не попасть. */
+.terkb-tools button {
+  min-width: 36px;
+  padding: 4px 8px;
+  font-size: 1.1em;
+}
+.terkb-tabs { padding: 2px 4px; }
+/* Открытую вкладку помечаем своим классом, а не состоянием :checked:
+   переключение идёт кодом, и состояние кнопки пришлось бы гонять вручную.
+   Селектор с именем элемента — иначе правило темы button:hover со
+   специфичностью (0,1,1) перебивает наш одноклассовый.
+   Здесь, у схемы «Система», годится акцентный цвет темы: он всегда яркий.
+   У остальных схем выделение бывает почти неотличимо от панели, и там
+   открытая вкладка красится фоном терминала — см. SKIN_CSS. */
+button.terkb-tab-on, button.terkb-tab-on:hover, button.terkb-tab-on:active {
+  background-image: none;
+  background-color: @theme_selected_bg_color;
+  color: #ffffff;
+  font-weight: bold;
+  text-shadow: none;
+}
 .kb-touchpad {
   margin: 1px;
   border-radius: 8px;
@@ -154,6 +176,19 @@ window.terkb-win { background-color: %(bg)s; color: %(fg)s; }
   color: %(selfg)s;
 }
 .terkb-bar button:disabled { color: %(dim)s; border-color: %(edge)s; }
+/* Открытая вкладка — фоном терминала, как её содержимое: акцентным цветом
+   красить нельзя, у половины схем выделение почти не отличается от панели
+   (в Dracula это тёмно-серый #44475a), и открытая вкладка терялась. Рамка
+   акцентная, подпись жирная — этого хватает и на светлых схемах.
+   Селектор из двух классов и имени элемента: одноклассовый перебило бы
+   правило «.terkb-bar button» несколькими строками выше. */
+.terkb-bar button.terkb-tab-on, .terkb-bar button.terkb-tab-on:hover,
+.terkb-bar button.terkb-tab-on:active {
+  background-color: %(bg)s;
+  border-color: %(sel)s;
+  color: %(fg)s;
+  font-weight: bold;
+}
 .kb-editor entry {
   background-image: none;
   background-color: %(key)s;
